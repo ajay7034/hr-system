@@ -508,7 +508,7 @@ export default function ReportsPage() {
             </button>
           )}
         >
-          <div className="form-grid">
+          <div className="form-grid report-filters-grid">
             <label className="field-span-2">
               <span>Search</span>
               <input name="search" value={filters.search} onChange={handleFilterChange} placeholder="Employee, code, document number, passport number..." />

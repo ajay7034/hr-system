@@ -11,6 +11,9 @@ const colors = ['#58d5ff', '#0fd28f', '#ffb957', '#ff6f91', '#9f8cff', '#7be495'
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [isCompactMobile, setIsCompactMobile] = useState(() => (
+    typeof window !== 'undefined' ? window.innerWidth <= 640 : false
+  ));
 
   useEffect(() => {
     let active = true;
@@ -58,7 +61,41 @@ export default function DashboardPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleResize = () => setIsCompactMobile(window.innerWidth <= 640);
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const counts = data?.counts || {};
+  const formatDocumentStatus = (value) => {
+    const normalized = String(value || '').replaceAll('_', ' ');
+    if (!isCompactMobile) {
+      return normalized;
+    }
+
+    return normalized === 'expiring soon' ? 'expiring' : normalized;
+  };
+  const formatDepartmentLabel = (value) => {
+    const normalized = String(value || '').trim();
+    if (!isCompactMobile) {
+      return normalized;
+    }
+
+    const compactMap = {
+      MANAGEMENT: 'Mgmt',
+      ACCOUNTS: 'Acct',
+      FINANCE: 'Fin',
+      'HUMAN RESOURCE': 'HR',
+      'INFORMATION TECHNOLOGY': 'IT',
+      OPERATIONS: 'Ops',
+      PURCHASE: 'Purch',
+      SALES: 'Sales',
+    };
+
+    return compactMap[normalized] || normalized.slice(0, 8);
+  };
 
   return (
     <AppShell
@@ -87,10 +124,16 @@ export default function DashboardPage() {
 
       <section className="dashboard-grid">
         <SectionCard title="Passport Custody Overview" subtitle="Current live custody status across the workforce.">
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={260}>
+          <div className={`chart-wrap dashboard-chart-wrap ${isCompactMobile ? 'is-compact' : ''}`}>
+            <ResponsiveContainer width="100%" height={isCompactMobile ? 220 : 260}>
               <PieChart>
-                <Pie data={data?.passportStatusChart || []} dataKey="value" nameKey="label" innerRadius={62} outerRadius={92}>
+                <Pie
+                  data={data?.passportStatusChart || []}
+                  dataKey="value"
+                  nameKey="label"
+                  innerRadius={isCompactMobile ? 44 : 62}
+                  outerRadius={isCompactMobile ? 72 : 92}
+                >
                   {(data?.passportStatusChart || []).map((entry, index) => <Cell key={entry.label} fill={colors[index % colors.length]} />)}
                 </Pie>
                 <Tooltip />
@@ -100,12 +143,12 @@ export default function DashboardPage() {
         </SectionCard>
 
         <SectionCard title="Expiry Status Summary" subtitle="Employee and company documents grouped by live status.">
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data?.documentStatusChart || []}>
+          <div className={`chart-wrap dashboard-chart-wrap ${isCompactMobile ? 'is-compact' : ''}`}>
+            <ResponsiveContainer width="100%" height={isCompactMobile ? 220 : 260}>
+              <BarChart data={data?.documentStatusChart || []} margin={isCompactMobile ? { top: 8, right: 8, left: -18, bottom: 0 } : undefined}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="label" />
-                <YAxis allowDecimals={false} />
+                <XAxis dataKey="label" tickFormatter={formatDocumentStatus} tick={{ fontSize: isCompactMobile ? 10 : 12 }} />
+                <YAxis allowDecimals={false} width={isCompactMobile ? 24 : 36} tick={{ fontSize: isCompactMobile ? 10 : 12 }} />
                 <Tooltip />
                 <Bar dataKey="value" radius={[12, 12, 0, 0]} fill="#73d2ff" />
               </BarChart>
@@ -114,12 +157,16 @@ export default function DashboardPage() {
         </SectionCard>
 
         <SectionCard title="Employees by Department" subtitle="Headcount visibility for operational planning.">
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data?.employeesByDepartmentChart || []} layout="vertical" margin={{ left: 20 }}>
+          <div className={`chart-wrap dashboard-chart-wrap ${isCompactMobile ? 'is-compact' : ''}`}>
+            <ResponsiveContainer width="100%" height={isCompactMobile ? 260 : 260}>
+              <BarChart
+                data={data?.employeesByDepartmentChart || []}
+                layout="vertical"
+                margin={isCompactMobile ? { top: 8, right: 8, left: -8, bottom: 8 } : { left: 20 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" allowDecimals={false} />
-                <YAxis type="category" dataKey="label" width={96} />
+                <XAxis type="number" allowDecimals={false} width={isCompactMobile ? 24 : 36} tick={{ fontSize: isCompactMobile ? 10 : 12 }} />
+                <YAxis type="category" dataKey="label" width={isCompactMobile ? 52 : 96} tickFormatter={formatDepartmentLabel} tick={{ fontSize: isCompactMobile ? 10 : 12 }} />
                 <Tooltip />
                 <Bar dataKey="value" radius={[0, 12, 12, 0]} fill="#0fd28f" />
               </BarChart>

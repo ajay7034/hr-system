@@ -1,0 +1,25 @@
+{
+  "name": "Media HR Portal",
+  "short_name": "Media HR",
+  "description": "HR document, passport, and request management portal.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef1f7",
+  "theme_color": "#24313a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "./pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

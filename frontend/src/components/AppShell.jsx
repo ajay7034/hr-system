@@ -3,18 +3,21 @@ import {
   Bell,
   BriefcaseBusiness,
   Building2,
+  Download,
   FileClock,
   FileSpreadsheet,
   FileText,
   IdCard,
   LayoutDashboard,
   LogOut,
+  Menu,
   MoonStar,
   Search,
   Settings,
   SunMedium,
   UserCog,
   Users,
+  X,
 } from 'lucide-react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -66,6 +69,7 @@ export default function AppShell({ title, subtitle, actions, notifications = [],
   const { user, logout } = useAuth();
   const [theme, setTheme] = useState(localStorage.getItem('hr-theme') || 'dark');
   const [expandedGroups, setExpandedGroups] = useState(['Dashboard', 'Employees', 'Company', 'Forms', 'Administration']);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [navSearch, setNavSearch] = useState('');
   const [globalSearch, setGlobalSearch] = useState('');
   const [globalSearchResults, setGlobalSearchResults] = useState([]);
@@ -73,6 +77,14 @@ export default function AppShell({ title, subtitle, actions, notifications = [],
   const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
   const [notificationItems, setNotificationItems] = useState([]);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState(null);
+  const [isStandalone, setIsStandalone] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  });
   const notificationRef = useRef(null);
   const globalSearchRef = useRef(null);
 
@@ -96,10 +108,48 @@ export default function AppShell({ title, subtitle, actions, notifications = [],
   }, [notificationOpen]);
 
   useEffect(() => {
+    setMobileNavOpen(false);
     setGlobalSearch('');
     setGlobalSearchResults([]);
     setGlobalSearchOpen(false);
+    setNotificationOpen(false);
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    document.body.classList.toggle('mobile-nav-open', mobileNavOpen);
+
+    return () => document.body.classList.remove('mobile-nav-open');
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia?.('(display-mode: standalone)');
+    const syncStandalone = () => {
+      setIsStandalone(mediaQuery?.matches || window.navigator.standalone === true);
+    };
+    const handleBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event);
+    };
+    const handleInstalled = () => {
+      setInstallPromptEvent(null);
+      setIsStandalone(true);
+    };
+
+    syncStandalone();
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleInstalled);
+    mediaQuery?.addEventListener?.('change', syncStandalone);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleInstalled);
+      mediaQuery?.removeEventListener?.('change', syncStandalone);
+    };
+  }, []);
 
   useEffect(() => {
     const query = globalSearch.trim();
@@ -208,6 +258,21 @@ export default function AppShell({ title, subtitle, actions, notifications = [],
     await loadNotifications();
   }
 
+  async function handleInstallApp() {
+    if (!installPromptEvent) {
+      return;
+    }
+
+    await installPromptEvent.prompt();
+    await installPromptEvent.userChoice.catch(() => null);
+    setInstallPromptEvent(null);
+  }
+
+  function handleNavSelection() {
+    setNavSearch('');
+    setMobileNavOpen(false);
+  }
+
   function selectGlobalResult(item) {
     if (!item?.route) {
       return;
@@ -221,7 +286,21 @@ export default function AppShell({ title, subtitle, actions, notifications = [],
 
   return (
     <div className="shell">
-      <aside className="sidebar glass-panel">
+      <button
+        type="button"
+        className={`mobile-sidebar-overlay ${mobileNavOpen ? 'is-visible' : ''}`}
+        aria-label="Close navigation"
+        onClick={() => setMobileNavOpen(false)}
+      />
+
+      <aside className={`sidebar glass-panel ${mobileNavOpen ? 'is-mobile-open' : ''}`}>
+        <div className="sidebar-mobile-head">
+          <strong>Navigation</strong>
+          <button type="button" className="icon-button sidebar-mobile-close" aria-label="Close menu" onClick={() => setMobileNavOpen(false)}>
+            <X size={18} />
+          </button>
+        </div>
+
         <div className="brand-band">
           <div className="brand">
             <div className="brand-mark">
@@ -264,7 +343,7 @@ export default function AppShell({ title, subtitle, actions, notifications = [],
                   to={to}
                   end={to === '/'}
                   className="nav-link nav-search-link"
-                  onClick={() => setNavSearch('')}
+                  onClick={handleNavSelection}
                 >
                   <Icon size={16} />
                   <span>{label}</span>
@@ -302,7 +381,7 @@ export default function AppShell({ title, subtitle, actions, notifications = [],
                     {expanded ? (
                       <div className="nav-submenu">
                         {group.items.map(({ to, label, icon: Icon }) => (
-                          <NavLink key={`${group.label}-${label}`} to={to} end={to === '/'} className="nav-link">
+                          <NavLink key={`${group.label}-${label}`} to={to} end={to === '/'} className="nav-link" onClick={handleNavSelection}>
                             <Icon size={16} />
                             <span>{label}</span>
                           </NavLink>
@@ -321,6 +400,7 @@ export default function AppShell({ title, subtitle, actions, notifications = [],
           className="sidebar-logout"
           onClick={async () => {
             await logout();
+            setMobileNavOpen(false);
             navigate('/login');
           }}
         >
@@ -331,6 +411,29 @@ export default function AppShell({ title, subtitle, actions, notifications = [],
 
       <main className="content page-transition">
         <header className="topbar glass-panel">
+          <div className="mobile-topbar-row">
+            <button
+              type="button"
+              className="icon-button mobile-nav-toggle"
+              aria-label="Open menu"
+              onClick={() => setMobileNavOpen(true)}
+            >
+              <Menu size={18} />
+            </button>
+            <div className="mobile-topbar-brand">
+              <strong>Media HR</strong>
+              <span>{user?.username || 'Portal user'}</span>
+            </div>
+            {installPromptEvent && !isStandalone ? (
+              <button type="button" className="secondary-button mobile-install-button" onClick={handleInstallApp}>
+                <Download size={16} />
+                <span>Install</span>
+              </button>
+            ) : (
+              <div className="mobile-topbar-spacer" />
+            )}
+          </div>
+
           <div className="topbar-main">
             <div className="topbar-copy">
               <div className="breadcrumbs">
