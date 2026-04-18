@@ -1,0 +1,2 @@
+employee_code,passport_number,issue_date,expiry_date,movement_type,movement_date,reason,remarks
+MEDIA-HR-001,PX123456,2021-01-01,2031-01-01,collected,2026-04-10,Collected for visa renewal,Sample row for Excel upload

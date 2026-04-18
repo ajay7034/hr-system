@@ -1,0 +1,2 @@
+employee_id,employee_code,full_name,department,designation,branch,company,email,mobile,joining_date,visa_status,emirates_id,passport_number,nationality,status,notes
+EMP-2001,MEDIA-HR-001,Sample Employee,Human Resources,HR Executive,Dubai HQ,Northstar Holdings,sample.employee@mediahr.local,+971500000001,2026-01-15,Active,784-1995-1111111-1,PX123456,Indian,active,Sample row for Excel upload
