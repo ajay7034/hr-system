@@ -38,6 +38,38 @@ final class EmployeeRequestController
         ");
     }
 
+    public static function syncNotifications(PDO $pdo): void
+    {
+        self::ensureSchema($pdo);
+
+        $pendingInsert = $pdo->prepare("
+            INSERT INTO notifications (
+                user_id, notification_type, title, message, severity, is_read, related_table, related_id, created_at
+            )
+            SELECT
+                NULL,
+                'employee_request_pending',
+                CONCAT('New ', er.request_title),
+                CONCAT(e.full_name, ' submitted ', er.request_title, '.'),
+                'warning',
+                0,
+                'employee_requests',
+                er.id,
+                er.created_at
+            FROM employee_requests er
+            INNER JOIN employees e ON e.id = er.employee_id
+            WHERE er.status = 'pending'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM notifications n
+                WHERE n.related_table = 'employee_requests'
+                  AND n.related_id = er.id
+                  AND n.notification_type = 'employee_request_pending'
+              )
+        ");
+        $pendingInsert->execute();
+    }
+
     public function employeeSearch(Request $request): void
     {
         self::ensureSchema($this->pdo);
@@ -128,6 +160,7 @@ final class EmployeeRequestController
                 'request_type' => $requestType,
             ]
         );
+        self::syncNotifications($this->pdo);
 
         Response::json([
             'success' => true,
@@ -204,6 +237,25 @@ final class EmployeeRequestController
         }
 
         $this->activityLogger->log(Auth::id(), 'employee_request', $id, 'approved', 'Employee request approved.');
+
+        $notification = $this->pdo->prepare("
+            INSERT INTO notifications (
+                user_id, notification_type, title, message, severity, is_read, related_table, related_id
+            )
+            SELECT
+                NULL,
+                'employee_request_approved',
+                'Request Approved',
+                CONCAT(e.full_name, ' • ', er.request_title, ' approved.'),
+                'success',
+                0,
+                'employee_requests',
+                er.id
+            FROM employee_requests er
+            INNER JOIN employees e ON e.id = er.employee_id
+            WHERE er.id = :id
+        ");
+        $notification->execute(['id' => $id]);
 
         Response::json([
             'success' => true,

@@ -128,13 +128,14 @@ final class ReminderService
             WHERE related_table = :related_table
               AND related_id = :related_id
               AND recipient_email = :recipient_email
-              AND DATE(created_at) = CURDATE()
+              AND subject = :subject
             LIMIT 1
         ");
         $check->execute([
             'related_table' => $table,
             'related_id' => $relatedId,
             'recipient_email' => $recipient,
+            'subject' => $subject,
         ]);
 
         if ($check->fetch()) {
@@ -142,7 +143,7 @@ final class ReminderService
         }
 
         $insert = $this->pdo->prepare("
-            INSERT INTO email_logs (related_table, related_id, recipient_email, subject, body, status)
+            INSERT IGNORE INTO email_logs (related_table, related_id, recipient_email, subject, body, status)
             VALUES (:related_table, :related_id, :recipient_email, :subject, :body, 'queued')
         ");
         $insert->execute([
@@ -153,6 +154,6 @@ final class ReminderService
             'body' => $body,
         ]);
 
-        return true;
+        return $insert->rowCount() > 0;
     }
 }

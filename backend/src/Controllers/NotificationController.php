@@ -17,6 +17,7 @@ final class NotificationController
     public function index(): void
     {
         (new ReminderService($this->pdo))->generate();
+        EmployeeRequestController::syncNotifications($this->pdo);
 
         $statement = $this->pdo->prepare("
             SELECT id, user_id, notification_type, title, message, severity, is_read, created_at, related_table, related_id

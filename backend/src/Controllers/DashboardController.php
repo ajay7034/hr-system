@@ -17,6 +17,7 @@ final class DashboardController
     {
         (new ReminderService($this->pdo))->generate();
         EmployeeRequestController::ensureSchema($this->pdo);
+        EmployeeRequestController::syncNotifications($this->pdo);
 
         $counts = [
             'totalEmployees' => (int) $this->pdo->query("SELECT COUNT(*) FROM employees WHERE deleted_at IS NULL")->fetchColumn(),

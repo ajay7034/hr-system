@@ -17,9 +17,25 @@ export default function DashboardPage() {
 
     const loadDashboard = async () => {
       try {
-        const { data: response } = await api.dashboard();
+        const { data: dashboardResponse } = await api.dashboard();
+        const mergedData = {
+          ...dashboardResponse.data,
+          counts: {
+            ...(dashboardResponse.data?.counts || {}),
+          },
+        };
+
+        try {
+          const { data: requestSummaryResponse } = await api.requests({ status: '' });
+          mergedData.counts.pendingRequests = requestSummaryResponse.summary?.pending ?? mergedData.counts.pendingRequests ?? 0;
+          mergedData.counts.approvedRequests = requestSummaryResponse.summary?.approved ?? mergedData.counts.approvedRequests ?? 0;
+        } catch {
+          mergedData.counts.pendingRequests = mergedData.counts.pendingRequests ?? 0;
+          mergedData.counts.approvedRequests = mergedData.counts.approvedRequests ?? 0;
+        }
+
         if (active) {
-          setData(response.data);
+          setData(mergedData);
         }
       } catch {
         if (active) {
