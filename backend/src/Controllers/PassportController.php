@@ -10,6 +10,7 @@ use App\Services\FileUploadService;
 use App\Services\PassportDocumentSyncService;
 use App\Services\PassportImportService;
 use PDO;
+use PDOException;
 
 final class PassportController
 {
@@ -71,18 +72,24 @@ final class PassportController
     public function upsert(Request $request): void
     {
         $employeeId = (int) $request->input('employee_id');
-        $movementType = $request->input('movement_type', 'collected');
+        $movementType = trim((string) $request->input('movement_type', 'collected'));
         $toStatus = $movementType === 'given_back' ? 'outside' : 'in_hand';
         $fromStatus = $toStatus === 'in_hand' ? 'outside' : 'in_hand';
-        $movementDate = $request->input('movement_date', date('Y-m-d'));
-        $reason = $request->input('reason');
-        $remarks = $request->input('remarks');
-        $passportFile = $this->uploadService->store($request->file('passport_file'), 'passports');
-        $passportNumber = $request->input('passport_number');
-        $issueDate = $request->input('issue_date');
-        $expiryDate = $request->input('expiry_date');
+        $movementDate = $this->normalizeDate($request->input('movement_date')) ?? date('Y-m-d');
+        $reason = $this->nullableString($request->input('reason'));
+        $remarks = $this->nullableString($request->input('remarks'));
+        $passportNumber = $this->nullableString($request->input('passport_number'));
+        $issueDate = $this->normalizeDate($request->input('issue_date'));
+        $expiryDate = $this->normalizeDate($request->input('expiry_date'));
+
+        $validationMessage = $this->validateUpsertPayload($employeeId, $movementType, $movementDate, $passportNumber, $reason, $issueDate, $expiryDate);
+        if ($validationMessage !== null) {
+            Response::json(['success' => false, 'message' => $validationMessage], 422);
+            return;
+        }
 
         try {
+            $passportFile = $this->uploadService->store($request->file('passport_file'), 'passports');
             $this->pdo->beginTransaction();
             $existingStatement = $this->pdo->prepare("SELECT * FROM passport_records WHERE employee_id = :employee_id LIMIT 1");
             $existingStatement->execute(['employee_id' => $employeeId]);
@@ -181,6 +188,16 @@ final class PassportController
             );
 
             $this->pdo->commit();
+        } catch (PDOException $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            Response::json([
+                'success' => false,
+                'message' => $this->friendlyPassportError($exception),
+            ], 422);
+            return;
         } catch (\Throwable $exception) {
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
@@ -310,5 +327,81 @@ final class PassportController
             'success' => true,
             'message' => 'Passport custody record deleted.',
         ]);
+    }
+
+    private function validateUpsertPayload(
+        int $employeeId,
+        string $movementType,
+        string|false|null $movementDate,
+        ?string $passportNumber,
+        ?string $reason,
+        string|false|null $issueDate,
+        string|false|null $expiryDate
+    ): ?string {
+        if ($employeeId <= 0) {
+            return 'Select an employee before saving passport custody.';
+        }
+
+        $employeeStatement = $this->pdo->prepare("
+            SELECT id
+            FROM employees
+            WHERE id = :id AND deleted_at IS NULL
+            LIMIT 1
+        ");
+        $employeeStatement->execute(['id' => $employeeId]);
+        if (!$employeeStatement->fetch()) {
+            return 'Selected employee was not found.';
+        }
+
+        if (!in_array($movementType, ['collected', 'given_back'], true)) {
+            return 'Select a valid movement type.';
+        }
+
+        if ($movementDate === false || $movementDate === null) {
+            return 'Enter a valid movement date.';
+        }
+
+        if ($passportNumber === null) {
+            return 'Passport number is required.';
+        }
+
+        if ($reason === null) {
+            return 'Reason is required.';
+        }
+
+        if ($issueDate === false || $expiryDate === false) {
+            return 'Enter valid issue and expiry dates.';
+        }
+
+        return null;
+    }
+
+    private function friendlyPassportError(PDOException $exception): string
+    {
+        $message = $exception->getMessage();
+
+        return match (true) {
+            str_contains($message, 'fk_passport_employee') => 'Selected employee was not found.',
+            str_contains($message, 'Incorrect date value') => 'Enter a valid movement date before saving.',
+            str_contains($message, "for key 'employee_id'") => 'Passport custody already exists for the selected employee.',
+            default => 'Unable to save passport custody. Check the selected employee and dates, then try again.',
+        };
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        $normalized = trim((string) $value);
+        return $normalized === '' ? null : $normalized;
+    }
+
+    private function normalizeDate(mixed $value): string|false|null
+    {
+        $normalized = trim((string) $value);
+        if ($normalized === '') {
+            return null;
+        }
+
+        $date = \DateTime::createFromFormat('Y-m-d', $normalized);
+        return $date && $date->format('Y-m-d') === $normalized ? $normalized : false;
     }
 }

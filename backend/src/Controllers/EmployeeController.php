@@ -9,6 +9,7 @@ use App\Services\ActivityLogger;
 use App\Services\EmployeeImportService;
 use App\Services\FileUploadService;
 use PDO;
+use PDOException;
 
 final class EmployeeController
 {
@@ -116,25 +117,39 @@ final class EmployeeController
     public function store(Request $request): void
     {
         $data = $this->employeePayload($request);
-        $profilePath = $this->uploadService->store($request->file('profile_photo'), 'employees');
+        $validationMessage = $this->validateEmployeePayload($data);
+        if ($validationMessage !== null) {
+            Response::json(['success' => false, 'message' => $validationMessage], 422);
+            return;
+        }
 
-        $statement = $this->pdo->prepare("
-            INSERT INTO employees (
-                employee_id, employee_code, company_id, branch_id, department_id, designation_id, full_name, first_name, last_name,
-                email, mobile, joining_date, visa_status, emirates_id, passport_number, nationality, status, profile_photo_path,
-                notes, created_by, updated_by
-            ) VALUES (
-                :employee_id, :employee_code, :company_id, :branch_id, :department_id, :designation_id, :full_name, :first_name, :last_name,
-                :email, :mobile, :joining_date, :visa_status, :emirates_id, :passport_number, :nationality, :status, :profile_photo_path,
-                :notes, :created_by, :updated_by
-            )
-        ");
+        try {
+            $profilePath = $this->uploadService->store($request->file('profile_photo'), 'employees');
 
-        $statement->execute($data + [
-            'profile_photo_path' => $profilePath,
-            'created_by' => Auth::id(),
-            'updated_by' => Auth::id(),
-        ]);
+            $statement = $this->pdo->prepare("
+                INSERT INTO employees (
+                    employee_id, employee_code, company_id, branch_id, department_id, designation_id, full_name, first_name, last_name,
+                    email, mobile, joining_date, visa_status, emirates_id, passport_number, nationality, status, profile_photo_path,
+                    notes, created_by, updated_by
+                ) VALUES (
+                    :employee_id, :employee_code, :company_id, :branch_id, :department_id, :designation_id, :full_name, :first_name, :last_name,
+                    :email, :mobile, :joining_date, :visa_status, :emirates_id, :passport_number, :nationality, :status, :profile_photo_path,
+                    :notes, :created_by, :updated_by
+                )
+            ");
+
+            $statement->execute($data + [
+                'profile_photo_path' => $profilePath,
+                'created_by' => Auth::id(),
+                'updated_by' => Auth::id(),
+            ]);
+        } catch (PDOException $exception) {
+            Response::json([
+                'success' => false,
+                'message' => $this->friendlyEmployeeError($exception),
+            ], 422);
+            return;
+        }
 
         $id = (int) $this->pdo->lastInsertId();
         $this->activityLogger->log(Auth::id(), 'employee', $id, 'created', 'Employee profile created.');
@@ -150,38 +165,52 @@ final class EmployeeController
     {
         $id = (int) $params['id'];
         $data = $this->employeePayload($request);
-        $profilePath = $this->uploadService->store($request->file('profile_photo'), 'employees');
+        $validationMessage = $this->validateEmployeePayload($data, $id);
+        if ($validationMessage !== null) {
+            Response::json(['success' => false, 'message' => $validationMessage], 422);
+            return;
+        }
 
-        $statement = $this->pdo->prepare("
-            UPDATE employees SET
-                employee_id = :employee_id,
-                employee_code = :employee_code,
-                company_id = :company_id,
-                branch_id = :branch_id,
-                department_id = :department_id,
-                designation_id = :designation_id,
-                full_name = :full_name,
-                first_name = :first_name,
-                last_name = :last_name,
-                email = :email,
-                mobile = :mobile,
-                joining_date = :joining_date,
-                visa_status = :visa_status,
-                emirates_id = :emirates_id,
-                passport_number = :passport_number,
-                nationality = :nationality,
-                status = :status,
-                notes = :notes,
-                updated_by = :updated_by,
-                profile_photo_path = COALESCE(:profile_photo_path, profile_photo_path)
-            WHERE id = :id
-        ");
+        try {
+            $profilePath = $this->uploadService->store($request->file('profile_photo'), 'employees');
 
-        $statement->execute($data + [
-            'id' => $id,
-            'updated_by' => Auth::id(),
-            'profile_photo_path' => $profilePath,
-        ]);
+            $statement = $this->pdo->prepare("
+                UPDATE employees SET
+                    employee_id = :employee_id,
+                    employee_code = :employee_code,
+                    company_id = :company_id,
+                    branch_id = :branch_id,
+                    department_id = :department_id,
+                    designation_id = :designation_id,
+                    full_name = :full_name,
+                    first_name = :first_name,
+                    last_name = :last_name,
+                    email = :email,
+                    mobile = :mobile,
+                    joining_date = :joining_date,
+                    visa_status = :visa_status,
+                    emirates_id = :emirates_id,
+                    passport_number = :passport_number,
+                    nationality = :nationality,
+                    status = :status,
+                    notes = :notes,
+                    updated_by = :updated_by,
+                    profile_photo_path = COALESCE(:profile_photo_path, profile_photo_path)
+                WHERE id = :id
+            ");
+
+            $statement->execute($data + [
+                'id' => $id,
+                'updated_by' => Auth::id(),
+                'profile_photo_path' => $profilePath,
+            ]);
+        } catch (PDOException $exception) {
+            Response::json([
+                'success' => false,
+                'message' => $this->friendlyEmployeeError($exception),
+            ], 422);
+            return;
+        }
 
         $this->activityLogger->log(Auth::id(), 'employee', $id, 'updated', 'Employee profile updated.');
 
@@ -252,24 +281,113 @@ final class EmployeeController
     private function employeePayload(Request $request): array
     {
         return [
-            'employee_id' => $request->input('employee_id'),
-            'employee_code' => $request->input('employee_code'),
-            'company_id' => $request->input('company_id'),
+            'employee_id' => trim((string) $request->input('employee_id')),
+            'employee_code' => trim((string) $request->input('employee_code')),
+            'company_id' => $this->nullableInt($request->input('company_id')),
             'branch_id' => null,
-            'department_id' => $request->input('department_id'),
-            'designation_id' => $request->input('designation_id'),
-            'full_name' => $request->input('full_name'),
-            'first_name' => $request->input('first_name'),
-            'last_name' => $request->input('last_name'),
-            'email' => $request->input('email'),
-            'mobile' => $request->input('mobile'),
-            'joining_date' => $request->input('joining_date'),
-            'visa_status' => $request->input('visa_status'),
-            'emirates_id' => $request->input('emirates_id'),
-            'passport_number' => $request->input('passport_number'),
-            'nationality' => $request->input('nationality'),
-            'status' => $request->input('status', 'active'),
-            'notes' => $request->input('notes'),
+            'department_id' => $this->nullableInt($request->input('department_id')),
+            'designation_id' => $this->nullableInt($request->input('designation_id')),
+            'full_name' => trim((string) $request->input('full_name')),
+            'first_name' => $this->nullableString($request->input('first_name')),
+            'last_name' => $this->nullableString($request->input('last_name')),
+            'email' => $this->nullableString($request->input('email')),
+            'mobile' => $this->nullableString($request->input('mobile')),
+            'joining_date' => $this->nullableDate($request->input('joining_date')),
+            'visa_status' => $this->nullableString($request->input('visa_status')),
+            'emirates_id' => $this->nullableString($request->input('emirates_id')),
+            'passport_number' => $this->nullableString($request->input('passport_number')),
+            'nationality' => $this->nullableString($request->input('nationality')),
+            'status' => trim((string) $request->input('status', 'active')),
+            'notes' => $this->nullableString($request->input('notes')),
         ];
+    }
+
+    private function validateEmployeePayload(array $data, ?int $ignoreId = null): ?string
+    {
+        if ($data['employee_id'] === '') {
+            return 'Employee ID is required.';
+        }
+
+        if ($data['employee_code'] === '') {
+            return 'Employee code is required.';
+        }
+
+        if ($data['full_name'] === '') {
+            return 'Full name is required.';
+        }
+
+        if (!in_array($data['status'], ['active', 'inactive', 'resigned', 'terminated'], true)) {
+            return 'Selected employee status is invalid.';
+        }
+
+        if ($data['email'] !== null && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+            return 'Enter a valid email address.';
+        }
+
+        $duplicates = [
+            'employee_id' => 'Employee ID already exists.',
+            'employee_code' => 'Employee code already exists.',
+            'passport_number' => 'Passport number already exists.',
+        ];
+
+        foreach ($duplicates as $field => $message) {
+            $value = $data[$field] ?? null;
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $statement = $this->pdo->prepare("
+                SELECT id
+                FROM employees
+                WHERE {$field} = :value
+                  AND (:ignore_id IS NULL OR id <> :ignore_id)
+                LIMIT 1
+            ");
+            $statement->execute([
+                'value' => $value,
+                'ignore_id' => $ignoreId,
+            ]);
+
+            if ($statement->fetch()) {
+                return $message;
+            }
+        }
+
+        return null;
+    }
+
+    private function friendlyEmployeeError(PDOException $exception): string
+    {
+        $message = $exception->getMessage();
+
+        return match (true) {
+            str_contains($message, "for key 'employee_id'") => 'Employee ID already exists.',
+            str_contains($message, "for key 'employee_code'") => 'Employee code already exists.',
+            str_contains($message, "for key 'passport_number'") => 'Passport number already exists.',
+            default => 'Unable to save employee. Check the entered values and try again.',
+        };
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        $normalized = trim((string) $value);
+        return $normalized === '' ? null : $normalized;
+    }
+
+    private function nullableInt(mixed $value): ?int
+    {
+        $normalized = trim((string) $value);
+        return $normalized === '' ? null : (int) $normalized;
+    }
+
+    private function nullableDate(mixed $value): ?string
+    {
+        $normalized = trim((string) $value);
+        if ($normalized === '') {
+            return null;
+        }
+
+        $date = \DateTime::createFromFormat('Y-m-d', $normalized);
+        return $date && $date->format('Y-m-d') === $normalized ? $normalized : null;
     }
 }
