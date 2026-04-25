@@ -23,6 +23,12 @@ final class EmployeeDocumentController
     public function index(Request $request): void
     {
         $search = trim((string) $request->query('search', ''));
+        $status = trim((string) $request->query('status', ''));
+        $allowedStatuses = ['expiring_soon', 'expired', 'valid'];
+        if (!in_array($status, $allowedStatuses, true)) {
+            $status = '';
+        }
+
         $statement = $this->pdo->prepare("
             SELECT ed.*, e.full_name, e.employee_code, edm.name AS document_type
             FROM employee_documents ed
@@ -30,6 +36,7 @@ final class EmployeeDocumentController
             INNER JOIN employee_document_masters edm ON edm.id = ed.document_master_id
             WHERE ed.deleted_at IS NULL
               AND e.deleted_at IS NULL
+              AND (:status = '' OR ed.status = :status)
               AND (
                 :search = ''
                 OR e.full_name LIKE :search_like
@@ -41,6 +48,7 @@ final class EmployeeDocumentController
         ");
         $statement->execute([
             'search' => $search,
+            'status' => $status,
             'search_like' => '%' . $search . '%',
         ]);
 

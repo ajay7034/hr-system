@@ -23,6 +23,11 @@ final class CompanyDocumentController
     public function index(Request $request): void
     {
         $search = trim((string) $request->query('search', ''));
+        $status = trim((string) $request->query('status', ''));
+        $allowedStatuses = ['expiring_soon', 'expired', 'valid'];
+        if (!in_array($status, $allowedStatuses, true)) {
+            $status = '';
+        }
 
         $statement = $this->pdo->prepare("
             SELECT cd.*, c.name AS company_name, cdm.name AS document_type
@@ -30,6 +35,7 @@ final class CompanyDocumentController
             LEFT JOIN companies c ON c.id = cd.company_id
             INNER JOIN company_document_masters cdm ON cdm.id = cd.document_master_id
             WHERE cd.deleted_at IS NULL
+              AND (:status = '' OR cd.status = :status)
               AND (
                 :search = ''
                 OR cd.document_name LIKE :search_like
@@ -41,6 +47,7 @@ final class CompanyDocumentController
         ");
         $statement->execute([
             'search' => $search,
+            'status' => $status,
             'search_like' => '%' . $search . '%',
         ]);
 
