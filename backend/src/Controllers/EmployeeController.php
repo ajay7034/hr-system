@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\Request;
 use App\Core\Response;
 use App\Services\ActivityLogger;
+use App\Services\EmiratesIdDocumentSyncService;
 use App\Services\EmployeeImportService;
 use App\Services\FileUploadService;
 use PDO;
@@ -17,7 +18,8 @@ final class EmployeeController
         private PDO $pdo,
         private FileUploadService $uploadService,
         private ActivityLogger $activityLogger,
-        private EmployeeImportService $employeeImportService
+        private EmployeeImportService $employeeImportService,
+        private EmiratesIdDocumentSyncService $emiratesIdDocumentSyncService
     ) {
     }
 
@@ -123,8 +125,15 @@ final class EmployeeController
             return;
         }
 
+        $profilePhotoValidation = $this->validateProfilePhotoFile($request->file('profile_photo'));
+        if ($profilePhotoValidation !== null) {
+            Response::json(['success' => false, 'message' => $profilePhotoValidation], 422);
+            return;
+        }
+
         try {
             $profilePath = $this->uploadService->store($request->file('profile_photo'), 'employees');
+            $this->pdo->beginTransaction();
 
             $statement = $this->pdo->prepare("
                 INSERT INTO employees (
@@ -143,15 +152,30 @@ final class EmployeeController
                 'created_by' => Auth::id(),
                 'updated_by' => Auth::id(),
             ]);
+
+            $id = (int) $this->pdo->lastInsertId();
+            $this->emiratesIdDocumentSyncService->sync($id, $data['emirates_id'], Auth::id());
+            $this->pdo->commit();
         } catch (PDOException $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
             Response::json([
                 'success' => false,
                 'message' => $this->friendlyEmployeeError($exception),
             ], 422);
             return;
+        } catch (\Throwable $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            Response::json([
+                'success' => false,
+                'message' => $exception->getMessage() ?: 'Unable to create employee.',
+            ], 422);
+            return;
         }
 
-        $id = (int) $this->pdo->lastInsertId();
         $this->activityLogger->log(Auth::id(), 'employee', $id, 'created', 'Employee profile created.');
 
         Response::json([
@@ -171,8 +195,15 @@ final class EmployeeController
             return;
         }
 
+        $profilePhotoValidation = $this->validateProfilePhotoFile($request->file('profile_photo'));
+        if ($profilePhotoValidation !== null) {
+            Response::json(['success' => false, 'message' => $profilePhotoValidation], 422);
+            return;
+        }
+
         try {
             $profilePath = $this->uploadService->store($request->file('profile_photo'), 'employees');
+            $this->pdo->beginTransaction();
 
             $statement = $this->pdo->prepare("
                 UPDATE employees SET
@@ -204,10 +235,24 @@ final class EmployeeController
                 'updated_by' => Auth::id(),
                 'profile_photo_path' => $profilePath,
             ]);
+            $this->emiratesIdDocumentSyncService->sync($id, $data['emirates_id'], Auth::id());
+            $this->pdo->commit();
         } catch (PDOException $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
             Response::json([
                 'success' => false,
                 'message' => $this->friendlyEmployeeError($exception),
+            ], 422);
+            return;
+        } catch (\Throwable $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            Response::json([
+                'success' => false,
+                'message' => $exception->getMessage() ?: 'Unable to update employee.',
             ], 422);
             return;
         }
@@ -366,6 +411,31 @@ final class EmployeeController
             str_contains($message, "for key 'passport_number'") => 'Passport number already exists.',
             default => 'Unable to save employee. Check the entered values and try again.',
         };
+    }
+
+    private function validateProfilePhotoFile(?array $file): ?string
+    {
+        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            return null;
+        }
+
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            return 'Profile photo upload failed.';
+        }
+
+        $extension = strtolower((string) pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
+        $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+
+        if (!in_array($extension, $allowedExtensions, true)) {
+            return 'Profile photo must be an image file (JPG, PNG, WEBP, or GIF).';
+        }
+
+        $mimeType = strtolower((string) ($file['type'] ?? ''));
+        if ($mimeType !== '' && !str_starts_with($mimeType, 'image/')) {
+            return 'Profile photo must be an image file.';
+        }
+
+        return null;
     }
 
     private function nullableString(mixed $value): ?string
