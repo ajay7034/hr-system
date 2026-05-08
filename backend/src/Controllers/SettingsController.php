@@ -4,6 +4,8 @@ namespace App\Controllers;
 
 use App\Core\Request;
 use App\Core\Response;
+use App\Services\AccommodationSchemaService;
+use App\Services\VehicleSchemaService;
 use PDO;
 
 final class SettingsController
@@ -14,12 +16,17 @@ final class SettingsController
 
     public function index(): void
     {
+        AccommodationSchemaService::ensureSchema($this->pdo);
+        VehicleSchemaService::ensureSchema($this->pdo);
+
         $masterData = [
             'companies' => $this->pdo->query("SELECT * FROM companies WHERE is_active = 1 ORDER BY name")->fetchAll(),
             'departments' => $this->pdo->query("SELECT * FROM departments WHERE is_active = 1 ORDER BY name")->fetchAll(),
             'designations' => $this->pdo->query("SELECT * FROM designations WHERE is_active = 1 ORDER BY name")->fetchAll(),
             'employeeDocumentMasters' => $this->pdo->query("SELECT * FROM employee_document_masters ORDER BY sort_order, name")->fetchAll(),
             'companyDocumentMasters' => $this->pdo->query("SELECT * FROM company_document_masters ORDER BY sort_order, name")->fetchAll(),
+            'accommodationDocumentMasters' => $this->pdo->query("SELECT * FROM accommodation_document_masters ORDER BY sort_order, name")->fetchAll(),
+            'vehicleDocumentMasters' => $this->pdo->query("SELECT * FROM vehicle_document_masters ORDER BY sort_order, name")->fetchAll(),
             'roles' => $this->pdo->query("SELECT id, name, slug, description FROM roles ORDER BY name")->fetchAll(),
             'settings' => $this->pdo->query("SELECT category, setting_key, setting_value FROM settings ORDER BY category, setting_key")->fetchAll(),
         ];
@@ -48,6 +55,9 @@ final class SettingsController
 
     public function saveMaster(Request $request, array $params): void
     {
+        AccommodationSchemaService::ensureSchema($this->pdo);
+        VehicleSchemaService::ensureSchema($this->pdo);
+
         $type = $params['type'] ?? '';
         $id = $request->input('id');
 
@@ -70,6 +80,14 @@ final class SettingsController
             ],
             'company-document-masters' => [
                 'table' => 'company_document_masters',
+                'fields' => ['name', 'code', 'has_expiry', 'default_alert_days', 'default_mail_enabled', 'default_notification_enabled', 'sort_order'],
+            ],
+            'accommodation-document-masters' => [
+                'table' => 'accommodation_document_masters',
+                'fields' => ['name', 'code', 'has_expiry', 'default_alert_days', 'default_mail_enabled', 'default_notification_enabled', 'sort_order'],
+            ],
+            'vehicle-document-masters' => [
+                'table' => 'vehicle_document_masters',
                 'fields' => ['name', 'code', 'has_expiry', 'default_alert_days', 'default_mail_enabled', 'default_notification_enabled', 'sort_order'],
             ],
             default => null,

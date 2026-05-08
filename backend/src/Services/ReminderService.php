@@ -12,6 +12,9 @@ final class ReminderService
 
     public function generate(): array
     {
+        AccommodationSchemaService::ensureSchema($this->pdo);
+        VehicleSchemaService::ensureSchema($this->pdo);
+
         $createdNotifications = 0;
         $queuedEmails = 0;
 
@@ -30,6 +33,44 @@ final class ReminderService
             INNER JOIN company_document_masters cdm ON cdm.id = cd.document_master_id
             WHERE cd.deleted_at IS NULL AND cd.expiry_date IS NOT NULL
               AND DATEDIFF(cd.expiry_date, CURDATE()) <= cd.alert_days
+        ")->fetchAll();
+
+        $vehicleDocuments = $this->pdo->query("
+            SELECT
+                vd.id,
+                vd.expiry_date,
+                vd.status,
+                vd.alert_days,
+                vd.mail_enabled,
+                vd.notification_enabled,
+                vd.document_name,
+                v.vehicle_name,
+                v.vehicle_number,
+                vdm.name AS document_type
+            FROM vehicle_documents vd
+            INNER JOIN vehicles v ON v.id = vd.vehicle_id AND v.deleted_at IS NULL
+            INNER JOIN vehicle_document_masters vdm ON vdm.id = vd.document_master_id
+            WHERE vd.deleted_at IS NULL AND vd.expiry_date IS NOT NULL
+              AND DATEDIFF(vd.expiry_date, CURDATE()) <= vd.alert_days
+        ")->fetchAll();
+
+        $accommodationDocuments = $this->pdo->query("
+            SELECT
+                ad.id,
+                ad.expiry_date,
+                ad.status,
+                ad.alert_days,
+                ad.mail_enabled,
+                ad.notification_enabled,
+                ad.document_name,
+                a.accommodation_name,
+                a.room_number,
+                adm.name AS document_type
+            FROM accommodation_documents ad
+            INNER JOIN accommodations a ON a.id = ad.accommodation_id AND a.deleted_at IS NULL
+            INNER JOIN accommodation_document_masters adm ON adm.id = ad.document_master_id
+            WHERE ad.deleted_at IS NULL AND ad.expiry_date IS NOT NULL
+              AND DATEDIFF(ad.expiry_date, CURDATE()) <= ad.alert_days
         ")->fetchAll();
 
         foreach ($employeeDocuments as $document) {
@@ -58,6 +99,44 @@ final class ReminderService
 
             if ((int) $document['notification_enabled'] === 1
                 && $this->storeNotification('company_documents', (int) $document['id'], $title, $message, $status === 'expired' ? 'critical' : 'warning')
+            ) {
+                $createdNotifications++;
+            }
+        }
+
+        foreach ($vehicleDocuments as $document) {
+            $status = strtotime($document['expiry_date']) < strtotime(date('Y-m-d')) ? 'expired' : 'expiring_soon';
+            $title = sprintf('%s %s', $document['document_type'], $status === 'expired' ? 'expired' : 'expiring soon');
+            $message = sprintf(
+                '%s for %s (%s) is %s on %s.',
+                $document['document_name'],
+                $document['vehicle_name'],
+                $document['vehicle_number'],
+                $status === 'expired' ? 'expired' : 'due',
+                $document['expiry_date']
+            );
+
+            if ((int) $document['notification_enabled'] === 1
+                && $this->storeNotification('vehicle_documents', (int) $document['id'], $title, $message, $status === 'expired' ? 'critical' : 'warning')
+            ) {
+                $createdNotifications++;
+            }
+        }
+
+        foreach ($accommodationDocuments as $document) {
+            $status = strtotime($document['expiry_date']) < strtotime(date('Y-m-d')) ? 'expired' : 'expiring_soon';
+            $title = sprintf('%s %s', $document['document_type'], $status === 'expired' ? 'expired' : 'expiring soon');
+            $message = sprintf(
+                '%s for %s (room %s) is %s on %s.',
+                $document['document_name'],
+                $document['accommodation_name'],
+                $document['room_number'],
+                $status === 'expired' ? 'expired' : 'due',
+                $document['expiry_date']
+            );
+
+            if ((int) $document['notification_enabled'] === 1
+                && $this->storeNotification('accommodation_documents', (int) $document['id'], $title, $message, $status === 'expired' ? 'critical' : 'warning')
             ) {
                 $createdNotifications++;
             }

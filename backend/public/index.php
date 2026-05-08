@@ -6,6 +6,8 @@ use App\Config\AppConfig;
 use App\Config\Env;
 use App\Controllers\AuthController;
 use App\Controllers\AdminToolsController;
+use App\Controllers\AccommodationController;
+use App\Controllers\AccommodationDocumentController;
 use App\Controllers\CompanyDocumentController;
 use App\Controllers\DashboardController;
 use App\Controllers\EmployeeController;
@@ -19,6 +21,8 @@ use App\Controllers\PassportController;
 use App\Controllers\ReportController;
 use App\Controllers\SettingsController;
 use App\Controllers\UserController;
+use App\Controllers\VehicleController;
+use App\Controllers\VehicleDocumentController;
 use App\Core\Database;
 use App\Core\Request;
 use App\Core\Router;
@@ -26,6 +30,7 @@ use App\Services\EmiratesIdDocumentSyncService;
 use App\Middleware\RequireAuth;
 use App\Middleware\RequireRole;
 use App\Services\ActivityLogger;
+use App\Services\AccommodationSchemaService;
 use App\Services\EmployeeImportService;
 use App\Services\FileUploadService;
 use App\Services\PassportDocumentSyncService;
@@ -56,6 +61,7 @@ $router = new Router();
 
 $uploadService = new FileUploadService($config['app']['upload_dir']);
 $activityLogger = new ActivityLogger($pdo);
+AccommodationSchemaService::ensureSchema($pdo);
 $passportDocumentSyncService = new PassportDocumentSyncService($pdo);
 $emiratesIdDocumentSyncService = new EmiratesIdDocumentSyncService($pdo);
 $employeeImportService = new EmployeeImportService($pdo, $emiratesIdDocumentSyncService);
@@ -63,11 +69,15 @@ $passportImportService = new PassportImportService($pdo, $passportDocumentSyncSe
 
 $authController = new AuthController($pdo);
 $dashboardController = new DashboardController($pdo);
+$accommodationController = new AccommodationController($pdo, $activityLogger);
+$accommodationDocumentController = new AccommodationDocumentController($pdo, $uploadService, $activityLogger);
 $employeeController = new EmployeeController($pdo, $uploadService, $activityLogger, $employeeImportService, $emiratesIdDocumentSyncService);
 $employeeRequestController = new EmployeeRequestController($pdo, $activityLogger);
 $passportController = new PassportController($pdo, $uploadService, $activityLogger, $passportDocumentSyncService, $passportImportService);
 $employeeDocumentController = new EmployeeDocumentController($pdo, $uploadService, $activityLogger);
 $companyDocumentController = new CompanyDocumentController($pdo, $uploadService, $activityLogger);
+$vehicleController = new VehicleController($pdo, $activityLogger);
+$vehicleDocumentController = new VehicleDocumentController($pdo, $uploadService, $activityLogger);
 $settingsController = new SettingsController($pdo);
 $userController = new UserController($pdo, $uploadService);
 $lookupController = new LookupController($pdo);
@@ -103,6 +113,15 @@ $router->add('POST', '/api/employees/{id}/delete', fn ($request, $params) => $em
 $router->add('GET', '/api/lookups', fn () => $lookupController->index(), [$auth]);
 $router->add('GET', '/api/search/global', fn ($request) => $globalSearchController->index($request), [$auth]);
 
+$router->add('GET', '/api/accommodations', fn ($request) => $accommodationController->index($request), [$auth]);
+$router->add('POST', '/api/accommodations', fn ($request) => $accommodationController->store($request), [$auth, $adminOrHr]);
+$router->add('POST', '/api/accommodations/{id}', fn ($request, $params) => $accommodationController->update($request, $params), [$auth, $adminOrHr]);
+$router->add('POST', '/api/accommodations/{id}/delete', fn ($request, $params) => $accommodationController->delete($request, $params), [$auth, $adminOrHr]);
+$router->add('GET', '/api/accommodation-documents', fn ($request) => $accommodationDocumentController->index($request), [$auth]);
+$router->add('POST', '/api/accommodation-documents', fn ($request) => $accommodationDocumentController->store($request), [$auth, $adminOrHr]);
+$router->add('POST', '/api/accommodation-documents/{id}', fn ($request, $params) => $accommodationDocumentController->update($request, $params), [$auth, $adminOrHr]);
+$router->add('POST', '/api/accommodation-documents/{id}/delete', fn ($request, $params) => $accommodationDocumentController->delete($request, $params), [$auth, $adminOrHr]);
+
 $router->add('GET', '/api/passports', fn ($request) => $passportController->lists($request), [$auth]);
 $router->add('GET', '/api/passports/history/{employeeId}', fn ($request, $params) => $passportController->history($request, $params), [$auth]);
 $router->add('POST', '/api/passports', fn ($request) => $passportController->upsert($request), [$auth, $adminOrHr]);
@@ -118,6 +137,17 @@ $router->add('GET', '/api/company-documents', fn ($request) => $companyDocumentC
 $router->add('POST', '/api/company-documents', fn ($request) => $companyDocumentController->store($request), [$auth, $adminOrHr]);
 $router->add('POST', '/api/company-documents/{id}', fn ($request, $params) => $companyDocumentController->update($request, $params), [$auth, $adminOrHr]);
 $router->add('POST', '/api/company-documents/{id}/delete', fn ($request, $params) => $companyDocumentController->delete($request, $params), [$auth, $adminOrHr]);
+
+$router->add('GET', '/api/vehicles', fn ($request) => $vehicleController->index($request), [$auth]);
+$router->add('GET', '/api/vehicles/history/{vehicleId}', fn ($request, $params) => $vehicleController->history($request, $params), [$auth]);
+$router->add('POST', '/api/vehicles', fn ($request) => $vehicleController->store($request), [$auth, $adminOrHr]);
+$router->add('POST', '/api/vehicles/{id}', fn ($request, $params) => $vehicleController->update($request, $params), [$auth, $adminOrHr]);
+$router->add('POST', '/api/vehicles/{id}/delete', fn ($request, $params) => $vehicleController->delete($request, $params), [$auth, $adminOrHr]);
+
+$router->add('GET', '/api/vehicle-documents', fn ($request) => $vehicleDocumentController->index($request), [$auth]);
+$router->add('POST', '/api/vehicle-documents', fn ($request) => $vehicleDocumentController->store($request), [$auth, $adminOrHr]);
+$router->add('POST', '/api/vehicle-documents/{id}', fn ($request, $params) => $vehicleDocumentController->update($request, $params), [$auth, $adminOrHr]);
+$router->add('POST', '/api/vehicle-documents/{id}/delete', fn ($request, $params) => $vehicleDocumentController->delete($request, $params), [$auth, $adminOrHr]);
 
 $router->add('GET', '/api/settings', fn () => $settingsController->index(), [$auth, $adminOnly]);
 $router->add('POST', '/api/settings', fn ($request) => $settingsController->saveSetting($request), [$auth, $adminOnly]);
