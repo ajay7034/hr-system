@@ -13,6 +13,7 @@ final class AppConfig
                 'url' => Env::get('APP_URL', 'http://localhost/hr/backend/public'),
                 'frontend_url' => Env::get('FRONTEND_URL', 'http://localhost:5173'),
                 'session_name' => Env::get('SESSION_NAME', 'hr_portal_session'),
+                'timezone' => Env::get('APP_TIMEZONE', 'Asia/Dubai'),
                 'upload_dir' => Env::get('UPLOAD_DIR', dirname(__DIR__, 2) . '/storage/uploads'),
             ],
             'db' => [

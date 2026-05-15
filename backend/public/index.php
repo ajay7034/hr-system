@@ -8,6 +8,7 @@ use App\Controllers\AuthController;
 use App\Controllers\AdminToolsController;
 use App\Controllers\AccommodationController;
 use App\Controllers\AccommodationDocumentController;
+use App\Controllers\AttendanceController;
 use App\Controllers\CompanyDocumentController;
 use App\Controllers\DashboardController;
 use App\Controllers\EmployeeController;
@@ -41,6 +42,7 @@ require dirname(__DIR__) . '/src/Support/helpers.php';
 
 Env::load(dirname(__DIR__));
 $config = AppConfig::all();
+date_default_timezone_set($config['app']['timezone'] ?? 'Asia/Dubai');
 
 session_name($config['app']['session_name']);
 session_start();
@@ -71,6 +73,7 @@ $authController = new AuthController($pdo);
 $dashboardController = new DashboardController($pdo);
 $accommodationController = new AccommodationController($pdo, $activityLogger);
 $accommodationDocumentController = new AccommodationDocumentController($pdo, $uploadService, $activityLogger);
+$attendanceController = new AttendanceController($pdo, $activityLogger);
 $employeeController = new EmployeeController($pdo, $uploadService, $activityLogger, $employeeImportService, $emiratesIdDocumentSyncService);
 $employeeRequestController = new EmployeeRequestController($pdo, $activityLogger);
 $passportController = new PassportController($pdo, $uploadService, $activityLogger, $passportDocumentSyncService, $passportImportService);
@@ -121,6 +124,11 @@ $router->add('GET', '/api/accommodation-documents', fn ($request) => $accommodat
 $router->add('POST', '/api/accommodation-documents', fn ($request) => $accommodationDocumentController->store($request), [$auth, $adminOrHr]);
 $router->add('POST', '/api/accommodation-documents/{id}', fn ($request, $params) => $accommodationDocumentController->update($request, $params), [$auth, $adminOrHr]);
 $router->add('POST', '/api/accommodation-documents/{id}/delete', fn ($request, $params) => $accommodationDocumentController->delete($request, $params), [$auth, $adminOrHr]);
+
+$router->add('GET', '/api/attendance', fn ($request) => $attendanceController->index($request), [$auth]);
+$router->add('GET', '/api/attendance/report', fn ($request) => $attendanceController->report($request), [$auth]);
+$router->add('POST', '/api/attendance/config', fn ($request) => $attendanceController->saveConfig($request), [$auth, $adminOrHr]);
+$router->add('POST', '/api/attendance/sync', fn ($request) => $attendanceController->sync($request), [$auth, $adminOrHr]);
 
 $router->add('GET', '/api/passports', fn ($request) => $passportController->lists($request), [$auth]);
 $router->add('GET', '/api/passports/history/{employeeId}', fn ($request, $params) => $passportController->history($request, $params), [$auth]);
