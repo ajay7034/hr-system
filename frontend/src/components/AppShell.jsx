@@ -539,6 +539,10 @@ export default function AppShell({ title, subtitle, actions, notifications = [],
         </header>
 
         {children}
+
+        <footer className="app-footer">
+          Developed by Ajay
+        </footer>
       </main>
     </div>
   );
