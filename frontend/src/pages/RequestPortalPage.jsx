@@ -322,6 +322,10 @@ export default function RequestPortalPage() {
             </button>
           </div>
         ) : null}
+
+        <footer className="app-footer app-footer-inline">
+          Developed by Ajay
+        </footer>
       </div>
     </div>
   );

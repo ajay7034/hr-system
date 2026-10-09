@@ -478,6 +478,20 @@ a {
   min-height: 100vh;
 }
 
+.app-footer {
+  margin-top: auto;
+  padding: 14px 4px 4px;
+  text-align: center;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.app-footer-inline {
+  margin-top: 18px;
+  padding: 0;
+}
+
 .topbar {
   display: flex;
   justify-content: space-between;

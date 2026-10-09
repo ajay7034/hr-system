@@ -87,6 +87,10 @@ export default function LoginPage() {
         <button type="submit" className="primary-button" disabled={loading}>
           {loading ? 'Signing in...' : 'Login'}
         </button>
+
+        <footer className="app-footer app-footer-inline">
+          Developed by Ajay
+        </footer>
       </form>
     </div>
   );
